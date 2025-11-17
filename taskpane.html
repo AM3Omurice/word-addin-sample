@@ -6,10 +6,76 @@
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
         button { padding: 10px 20px; font-size: 16px; }
+        pre { background: #f5f5f5; padding: 12px; border-radius: 6px; }
     </style>
+    <!-- Office.js を CDN から読み込み -->
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
 </head>
 <body>
     <h1>Sample Word Add-in</h1>
-    <button onclick="alert('Button clicked!')">Click Me</button>
+
+    <button id="btnUser">ユーザー情報を表示</button>
+
+    <h2>結果</h2>
+    <div id="status">準備中...</div>
+    <pre id="claims"></pre>
+
+    <script>
+      // Base64URL をデコードして JSON を返すユーティリティ
+      function decodeJwt(jwt) {
+        // JWT は 3 区切り: header.payload.signature
+        const parts = jwt.split('.');
+        if (parts.length < 2) throw new Error('Invalid JWT');
+        const base64url = parts[1];
+        const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - base64url.length % 4) % 4);
+        const json = atob(base64);
+        return JSON.parse(json);
+      }
+
+      Office.onReady(async () => {
+        document.getElementById('status').textContent = '準備完了。ボタンを押してください。';
+
+        document.getElementById('btnUser').addEventListener('click', async () => {
+          const status = document.getElementById('status');
+          const claimsEl = document.getElementById('claims');
+
+          status.textContent = 'サインイン／トークン取得中...';
+
+          try {
+            // SSO トークン取得（必要に応じてサインイン／同意ダイアログが表示されます）
+            // OfficeRuntime.auth と Office.auth は同等です。ここでは OfficeRuntime を使用。
+            const token = await OfficeRuntime.auth.getAccessToken({
+              allowSignInPrompt: true,   // 未サインインならプロンプト
+              allowConsentPrompt: true   // 初回の権限同意を許可
+              // forceAddAccount: false, // 必要なら追加
+            });
+
+            // JWT をデコードしてクレームを取り出す
+            const claims = decodeJwt(token);
+
+            // 代表的なクレーム（テナントや環境によりキーが異なる場合あり）
+            const displayName = claims.name || claims.preferred_username || claims.email || '(unknown)';
+            const userPrincipal = claims.preferred_username || claims.upn || claims.email || '';
+            const oid = claims.oid || claims.sub || '';
+
+            status.textContent = '取得成功。以下がユーザー情報です。';
+            claimsEl.textContent = JSON.stringify({
+              displayName,
+              userPrincipal,
+              objectId: oid,
+              issuer: claims.iss,
+              audience: claims.aud,
+              tenantId: claims.tid,
+              exp: claims.exp
+            }, null, 2);
+          } catch (err) {
+            // 代表的なエラー：
+            // 13001: ユーザーが Office にサインインしていない（Outlook Web/Safari など特例あり）
+            // 13012: SSO 構成／同意の問題
+            status.textContent = `取得失敗: ${err && err.message ? err.message : err}`;
+            claimsEl.textContent = '';
+          }
+        });
+      });
+    </script>
 </body>
-</html>
