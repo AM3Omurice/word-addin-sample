@@ -90,25 +90,39 @@
             // Graph API用のトークンを取得（MSAL使用）
             const photoEl = document.getElementById('userPhoto');
             let graphToken = null;
-            try {
-              // まずサイレント認証を試行
-              const account = msalInstance.getAllAccounts()[0];
-              if (account) {
+            
+            const account = msalInstance.getAllAccounts()[0];
+            
+            if (account) {
+              // アカウントがある場合はサイレント認証を試行
+              try {
                 const silentResult = await msalInstance.acquireTokenSilent({
                   scopes: ['User.Read'],
                   account: account
                 });
                 graphToken = silentResult.accessToken;
+              } catch (silentError) {
+                console.error('Silent auth failed:', silentError);
+                // サイレント失敗時はポップアップで認証
+                try {
+                  const loginResult = await msalInstance.acquireTokenPopup({
+                    scopes: ['User.Read']
+                  });
+                  graphToken = loginResult.accessToken;
+                } catch (loginError) {
+                  photoEl.innerHTML = `<p style="font-size: 12px; color: #d13438;">Graph API認証失敗: ${loginError.message || loginError}</p>`;
+                  console.error('Login error:', loginError);
+                }
               }
-            } catch (silentError) {
-              // サイレント失敗時はポップアップで認証
+            } else {
+              // アカウントがない場合は直接ポップアップで認証
               try {
                 const loginResult = await msalInstance.acquireTokenPopup({
                   scopes: ['User.Read']
                 });
                 graphToken = loginResult.accessToken;
               } catch (loginError) {
-                photoEl.innerHTML = `<p style="font-size: 12px; color: #d13438;">Graph API認証失敗</p>`;
+                photoEl.innerHTML = `<p style="font-size: 12px; color: #d13438;">Graph API認証失敗: ${loginError.message || loginError}</p>`;
                 console.error('Login error:', loginError);
               }
             }
