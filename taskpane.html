@@ -78,16 +78,20 @@
                 }
               });
 
+              const photoEl = document.getElementById('userPhoto');
               if (photoResponse.ok) {
                 const photoBlob = await photoResponse.blob();
                 const photoUrl = URL.createObjectURL(photoBlob);
-                const photoEl = document.getElementById('userPhoto');
                 photoEl.innerHTML = `<img src="${photoUrl}" alt="User Photo" style="width: 100px; height: 100px; border-radius: 50%;">`;
               } else {
-                document.getElementById('userPhoto').innerHTML = '<p>プロフィール写真が見つかりません</p>';
+                // デフォルト写真の場合：イニシャルアイコンを表示
+                const initials = displayName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+                photoEl.innerHTML = `<div style="width: 100px; height: 100px; border-radius: 50%; background: #0078d4; color: white; display: flex; align-items: center; justify-content: center; font-size: 36px; font-weight: bold;">${initials}</div>`;
               }
             } catch (photoErr) {
-              document.getElementById('userPhoto').innerHTML = '<p>プロフィール写真の取得に失敗しました</p>';
+              // エラー時もイニシャルアイコンを表示
+              const initials = displayName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+              document.getElementById('userPhoto').innerHTML = `<div style="width: 100px; height: 100px; border-radius: 50%; background: #0078d4; color: white; display: flex; align-items: center; justify-content: center; font-size: 36px; font-weight: bold;">${initials}</div>`;
               console.error('Photo error:', photoErr);
             }
           } catch (err) {
