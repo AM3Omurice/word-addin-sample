@@ -10,6 +10,8 @@
     </style>
     <!-- Office.js を CDN から読み込み -->
     <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <!-- MSAL.js を CDN から読み込み -->
+    <script src="https://alcdn.msauth.net/browser/2.35.0/js/msal-browser.min.js"></script>
 </head>
 <body>
     <h1>Sample Word Add-in</h1>
@@ -22,6 +24,21 @@
     <pre id="claims"></pre>
 
     <script>
+      // MSAL 設定
+      const msalConfig = {
+        auth: {
+          clientId: 'ce1db0ef-5d35-4a00-a8ee-d4fba99e60ad',
+          authority: 'https://login.microsoftonline.com/common',
+          redirectUri: 'https://am3omurice.github.io/word-addin-sample/taskpane.html'
+        },
+        cache: {
+          cacheLocation: 'localStorage',
+          storeAuthStateInCookie: false
+        }
+      };
+
+      const msalInstance = new msal.PublicClientApplication(msalConfig);
+
       // Base64URL をデコードして JSON を返すユーティリティ
       function decodeJwt(jwt) {
         // JWT は 3 区切り: header.payload.signature
@@ -70,14 +87,40 @@
               exp: claims.exp
             }, null, 2);
 
-            // プロフィール写真を取得
+            // Graph API用のトークンを取得（MSAL使用）
             const photoEl = document.getElementById('userPhoto');
+            let graphToken = null;
             try {
-              const photoResponse = await fetch('https://graph.microsoft.com/v1.0/me/photo/$value', {
-                headers: {
-                  'Authorization': 'Bearer ' + token
-                }
-              });
+              // まずサイレント認証を試行
+              const account = msalInstance.getAllAccounts()[0];
+              if (account) {
+                const silentResult = await msalInstance.acquireTokenSilent({
+                  scopes: ['User.Read'],
+                  account: account
+                });
+                graphToken = silentResult.accessToken;
+              }
+            } catch (silentError) {
+              // サイレント失敗時はポップアップで認証
+              try {
+                const loginResult = await msalInstance.acquireTokenPopup({
+                  scopes: ['User.Read']
+                });
+                graphToken = loginResult.accessToken;
+              } catch (loginError) {
+                photoEl.innerHTML = `<p style="font-size: 12px; color: #d13438;">Graph API認証失敗</p>`;
+                console.error('Login error:', loginError);
+              }
+            }
+
+            // プロフィール写真を取得
+            if (graphToken) {
+              try {
+                const photoResponse = await fetch('https://graph.microsoft.com/v1.0/me/photo/$value', {
+                  headers: {
+                    'Authorization': 'Bearer ' + graphToken
+                  }
+                });
 
               if (photoResponse.ok) {
                 const photoBlob = await photoResponse.blob();
@@ -92,11 +135,12 @@
                 const initials = displayName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
                 photoEl.innerHTML = `<div style="width: 100px; height: 100px; border-radius: 50%; background: #0078d4; color: white; display: flex; align-items: center; justify-content: center; font-size: 36px; font-weight: bold;">${initials}</div><p style="font-size: 12px; color: #d13438;">写真取得エラー (status: ${photoResponse.status})</p>`;
               }
-            } catch (photoErr) {
-              // ネットワークエラーなど
-              const initials = displayName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
-              photoEl.innerHTML = `<div style="width: 100px; height: 100px; border-radius: 50%; background: #0078d4; color: white; display: flex; align-items: center; justify-content: center; font-size: 36px; font-weight: bold;">${initials}</div><p style="font-size: 12px; color: #d13438;">写真取得失敗: ${photoErr.message || photoErr}</p>`;
-              console.error('Photo error:', photoErr);
+              } catch (photoErr) {
+                // ネットワークエラーなど
+                const initials = displayName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+                photoEl.innerHTML = `<div style="width: 100px; height: 100px; border-radius: 50%; background: #0078d4; color: white; display: flex; align-items: center; justify-content: center; font-size: 36px; font-weight: bold;">${initials}</div><p style="font-size: 12px; color: #d13438;">写真取得失敗: ${photoErr.message || photoErr}</p>`;
+                console.error('Photo error:', photoErr);
+              }
             }
           } catch (err) {
             // 代表的なエラー：
