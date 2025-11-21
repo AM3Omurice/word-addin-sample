@@ -18,6 +18,7 @@
 
     <h2>結果</h2>
     <div id="status">準備中...</div>
+    <div id="userPhoto" style="margin: 10px 0;"></div>
     <pre id="claims"></pre>
 
     <script>
@@ -68,6 +69,27 @@
               tenantId: claims.tid,
               exp: claims.exp
             }, null, 2);
+
+            // プロフィール写真を取得
+            try {
+              const photoResponse = await fetch('https://graph.microsoft.com/v1.0/me/photo/$value', {
+                headers: {
+                  'Authorization': 'Bearer ' + token
+                }
+              });
+
+              if (photoResponse.ok) {
+                const photoBlob = await photoResponse.blob();
+                const photoUrl = URL.createObjectURL(photoBlob);
+                const photoEl = document.getElementById('userPhoto');
+                photoEl.innerHTML = `<img src="${photoUrl}" alt="User Photo" style="width: 100px; height: 100px; border-radius: 50%;">`;
+              } else {
+                document.getElementById('userPhoto').innerHTML = '<p>プロフィール写真が見つかりません</p>';
+              }
+            } catch (photoErr) {
+              document.getElementById('userPhoto').innerHTML = '<p>プロフィール写真の取得に失敗しました</p>';
+              console.error('Photo error:', photoErr);
+            }
           } catch (err) {
             // 代表的なエラー：
             // 13001: ユーザーが Office にサインインしていない（Outlook Web/Safari など特例あり）
